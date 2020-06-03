@@ -1,4 +1,3 @@
-#![feature(const_in_array_repeat_expressions)]
 use std::mem;
 use std::convert::TryInto;
 
@@ -628,6 +627,6 @@ impl VirtualMachine {
 }
 
 fn main() {
-    let mut vm = VirtualMachine::new(vec![1, 0, 0, 5, 1, 2, 0, 6, 7, 0, 7, 2]);
+    let mut vm = VirtualMachine::new(vec![1, 0, 0, 5, 1, 2, 0, 6, 11, 0, 2, 19, 0, 7, 0]);
     vm.cpu();
 }
