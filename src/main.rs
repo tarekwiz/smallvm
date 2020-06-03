@@ -19,7 +19,7 @@ enum Variable {
 type Register = usize;
 type Address = usize;
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 enum Instruction {
     NOP(),                          //do nothing
     MOV(Register, Variable),        //mov variable to reg
@@ -58,11 +58,12 @@ struct VirtualMachine {
     code : Vec<u8>,
     stack : Vec<Variable>,
     data : Vec<Variable>,
+    is_executing : bool,
 }
 
 impl VirtualMachine {
     fn new(c : Vec<u8>) -> Self {
-        VirtualMachine { ip: 0, sp: 0, fp: 0, flag_eq: false, flag_gt: false, reg: [Variable::U8(0); 8], code: c, stack: Vec::new(), data: Vec::new() } 
+        VirtualMachine { ip: 0, sp: 0, fp: 0, flag_eq: false, flag_gt: false, reg: [Variable::U8(0); 8], code: c, stack: Vec::new(), data: Vec::new(), is_executing: false } 
     }
     fn decode_variable(&mut self) -> Variable {
         self.ip += 1;
@@ -133,11 +134,6 @@ impl VirtualMachine {
             },
             _ => Variable::None()
         }
-    }
-
-    //TODO: implement
-    fn encode_variable(var: Variable) -> Vec<u8> {
-        Vec::new()
     }
 
     fn decode(&mut self) -> Instruction {
@@ -436,9 +432,7 @@ impl VirtualMachine {
                     (Variable::F64(v), Variable::F64(u)) => {
                         self.stack.push(Variable::F64(u+v));
                     },
-                    _ => {
-                        self.flag_eq = false;
-                    }
+                    _ => {return false;}
                 }
                 true
             },
@@ -476,9 +470,7 @@ impl VirtualMachine {
                     (Variable::F64(v), Variable::F64(u)) => {
                         self.stack.push(Variable::F64(u-v));
                     },
-                    _ => {
-                        self.flag_eq = false;
-                    }
+                    _ => {return false;}
                 }
                 true
             },
@@ -516,9 +508,7 @@ impl VirtualMachine {
                     (Variable::F64(v), Variable::F64(u)) => {
                         self.stack.push(Variable::F64(u*v));
                     },
-                    _ => {
-                        self.flag_eq = false;
-                    }
+                    _ => {return false;}
                 }
                 true
             },
@@ -556,9 +546,7 @@ impl VirtualMachine {
                     (Variable::F64(v), Variable::F64(u)) => {
                         self.stack.push(Variable::F64(u/v));
                     },
-                    _ => {
-                        self.flag_eq = false;
-                    }
+                    _ => {return false;}
                 }
                 true
             },
@@ -601,17 +589,27 @@ impl VirtualMachine {
                     _ => false
                 }
             }
-            Instruction::HALT() => false,
+            Instruction::HALT() => {
+                self.is_executing = false;
+                true
+            },
             _ => true
         }
     }
 
     fn cpu(&mut self) {
-        while self.ip < self.code.len() - 1 
+        //machine is already running.
+        if self.is_executing {
+            return;
+        }
+
+        self.is_executing = true;
+
+        while self.ip < self.code.len() && self.is_executing
         {
             //decode current instruction
             let instr = self.decode();
-
+            
             //execute instruction
             let result = self.execute(instr);
 
@@ -627,6 +625,6 @@ impl VirtualMachine {
 }
 
 fn main() {
-    let mut vm = VirtualMachine::new(vec![1, 0, 0, 5, 1, 2, 0, 6, 11, 0, 2, 19, 0, 7, 0]);
+    let mut vm = VirtualMachine::new(vec![1, 0, 8, 0, 0, 0xc0, 0x3f, 1, 2, 8, 0, 0, 0xc0, 0x3f, 11, 0, 2, 19, 0, 7, 0, 22]);
     vm.cpu();
 }
