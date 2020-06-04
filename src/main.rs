@@ -1,7 +1,8 @@
 use std::mem;
 use std::convert::TryInto;
+use derive_more::*;
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialOrd, PartialEq, Add, Sub)]
 enum Variable {
     None(),
     U8(u8),
@@ -25,8 +26,8 @@ enum Instruction {
     MOV(Register, Variable),        //mov variable to reg
     MOVR(Register, Register),       //mov reg contents to another reg
     JMP(Register),                  //jump to location
-    JE(Register),                   //Jump if zero to location
-    JNE(Register),                  //Jump if not zero to location
+    JE(Register),                   //Jump if equal to location
+    JNE(Register),                  //Jump if not equal to location
     JG(Register),                   //Jump if greater than
     JL(Register),                   //Jump if less than
     CMP(Register, Register),        //Compares two registers
@@ -40,6 +41,11 @@ enum Instruction {
     SUB(Register, Register),        //Subtract 2 registers and pushes result on stack
     MUL(Register, Register),        //Multiple 2 registers and pushes result on stack
     DIV(Register, Register),        //Divide 2 registers and pushes result on stack
+    AND(Register, Register),        //Bitwise AND on 2 registers. pushes result on stack
+    OR(Register, Register),         //Bitwise OR on 2 registers. pushes result on stack
+    XOR(Register, Register),        //Bitwise XOR on 2 registers. pushes result on stack
+    SHR(Register, Variable),        //Shifts register to the right by (Variable)
+    SHL(Register, Variable),        //Shifts register to the left by (Variable)
     VPUSH(Variable),                //Push variable on to the stack
     VPUSHR(Register),               //Push register contents on the stack
     VPOP(Register),                 //pops variable from stack to register
@@ -50,8 +56,6 @@ enum Instruction {
 
 struct VirtualMachine {
     ip : Address,
-    sp : Address,
-    fp : Address,
     flag_eq : bool,
     flag_gt: bool,
     reg : [Variable; 8],
@@ -63,7 +67,7 @@ struct VirtualMachine {
 
 impl VirtualMachine {
     fn new(c : Vec<u8>) -> Self {
-        VirtualMachine { ip: 0, sp: 0, fp: 0, flag_eq: false, flag_gt: false, reg: [Variable::U8(0); 8], code: c, stack: Vec::new(), data: Vec::new(), is_executing: false } 
+        VirtualMachine { ip: 0, flag_eq: false, flag_gt: false, reg: [Variable::U8(0); 8], code: c, stack: Vec::new(), data: Vec::new(), is_executing: false } 
     }
     fn decode_variable(&mut self) -> Variable {
         self.ip += 1;
@@ -267,14 +271,46 @@ impl VirtualMachine {
                 self.ip += 1;
                 let reg = self.code[self.ip] as Register;
                 Instruction::JL(reg)
-            }, 
+            },
+            25 => {
+                self.ip += 1;
+                let reg1 = self.code[self.ip] as Register;
+                self.ip += 1;
+                let reg2 = self.code[self.ip] as Register;
+                Instruction::AND(reg1, reg2)
+            },
+            26 => {
+                self.ip += 1;
+                let reg1 = self.code[self.ip] as Register;
+                self.ip += 1;
+                let reg2 = self.code[self.ip] as Register;
+                Instruction::OR(reg1, reg2)
+            },
+            27 => {
+                self.ip += 1;
+                let reg1 = self.code[self.ip] as Register;
+                self.ip += 1;
+                let reg2 = self.code[self.ip] as Register;
+                Instruction::XOR(reg1, reg2)
+            },
+            28 => {
+                self.ip += 1;
+                let reg = self.code[self.ip] as Register;
+                let var = self.decode_variable();
+                Instruction::SHR(reg, var)
+            },
+            29 => {
+                self.ip += 1;
+                let reg = self.code[self.ip] as Register;
+                let var = self.decode_variable();
+                Instruction::SHL(reg, var)
+            },
             _ => Instruction::NOP(),
         }
     }
-
     fn execute(&mut self, instr: Instruction) -> bool
     {
-        println!("Executing: {:?} ", instr);
+        println!("Executing: {:?} \t  current ip: {:?}", instr, self.ip + 1);
         match instr {
             Instruction::NOP() => true,
             Instruction::MOV(reg, var) => {
@@ -325,51 +361,8 @@ impl VirtualMachine {
             Instruction::CMP(reg1, reg2) => {
                 let v1 = self.reg[reg1];
                 let v2 = self.reg[reg2];
-                match (v1, v2){
-                    (Variable::U8(v), Variable::U8(u)) => {
-                        self.flag_eq = v == u;
-                        self.flag_gt = v > u;
-                    },
-                    (Variable::I8(v), Variable::I8(u)) => {
-                        self.flag_eq = v == u;
-                        self.flag_gt = v > u;
-                    },
-                    (Variable::U16(v), Variable::U16(u)) => {
-                        self.flag_eq = v == u;
-                        self.flag_gt = v > u;
-                    },
-                    (Variable::I16(v), Variable::I16(u)) => {
-                        self.flag_eq = v == u;
-                        self.flag_gt = v > u;
-                    },
-                    (Variable::U32(v), Variable::U32(u)) => {
-                        self.flag_eq = v == u;
-                        self.flag_gt = v > u;
-                    },
-                    (Variable::I32(v), Variable::I32(u)) => {
-                        self.flag_eq = v == u;
-                        self.flag_gt = v > u;
-                    },
-                    (Variable::U64(v), Variable::U64(u)) => {
-                        self.flag_eq = v == u;
-                        self.flag_gt = v > u;
-                    },
-                    (Variable::I64(v), Variable::I64(u)) => {
-                        self.flag_eq = v == u;
-                        self.flag_gt = v > u;
-                    },
-                    (Variable::F32(v), Variable::F32(u)) => {
-                        self.flag_eq = v == u;
-                        self.flag_gt = v > u;
-                    },
-                    (Variable::F64(v), Variable::F64(u)) => {
-                        self.flag_eq = v == u;
-                        self.flag_gt = v > u;
-                    },
-                    _ => {
-                        self.flag_eq = false;
-                    }
-                }
+                self.flag_eq = v1 == v2;
+                self.flag_gt = v1 > v2;
                 true
             },
             Instruction::PRINTR(reg) => {
@@ -401,78 +394,22 @@ impl VirtualMachine {
             Instruction::ADD(reg1, reg2) => {
                 let v1 = self.reg[reg1];
                 let v2 = self.reg[reg2];
-                match (v1, v2){
-                    (Variable::U8(v), Variable::U8(u)) => {
-                        self.stack.push(Variable::U8(u+v));
-                    },
-                    (Variable::I8(v), Variable::I8(u)) => {
-                        self.stack.push(Variable::I8(u+v));
-                    },
-                    (Variable::U16(v), Variable::U16(u)) => {
-                        self.stack.push(Variable::U16(u+v));
-                    },
-                    (Variable::I16(v), Variable::I16(u)) => {
-                        self.stack.push(Variable::I16(u+v));
-                    },
-                    (Variable::U32(v), Variable::U32(u)) => {
-                        self.stack.push(Variable::U32(u+v));
-                    },
-                    (Variable::I32(v), Variable::I32(u)) => {
-                        self.stack.push(Variable::I32(u+v));
-                    },
-                    (Variable::U64(v), Variable::U64(u)) => {
-                        self.stack.push(Variable::U64(u+v));
-                    },
-                    (Variable::I64(v), Variable::I64(u)) => {
-                        self.stack.push(Variable::I64(u+v));
-                    },
-                    (Variable::F32(v), Variable::F32(u)) => {
-                        self.stack.push(Variable::F32(u+v));
-                    },
-                    (Variable::F64(v), Variable::F64(u)) => {
-                        self.stack.push(Variable::F64(u+v));
-                    },
-                    _ => {return false;}
+                if let Ok(r) = v1 + v2 {
+                    self.stack.push(r);
+                    true
+                } else {
+                    false
                 }
-                true
             },
             Instruction::SUB(reg1, reg2) => {
                 let v1 = self.reg[reg1];
                 let v2 = self.reg[reg2];
-                match (v1, v2){
-                    (Variable::U8(v), Variable::U8(u)) => {
-                        self.stack.push(Variable::U8(u-v));
-                    },
-                    (Variable::I8(v), Variable::I8(u)) => {
-                        self.stack.push(Variable::I8(u-v));
-                    },
-                    (Variable::U16(v), Variable::U16(u)) => {
-                        self.stack.push(Variable::U16(u-v));
-                    },
-                    (Variable::I16(v), Variable::I16(u)) => {
-                        self.stack.push(Variable::I16(u-v));
-                    },
-                    (Variable::U32(v), Variable::U32(u)) => {
-                        self.stack.push(Variable::U32(u-v));
-                    },
-                    (Variable::I32(v), Variable::I32(u)) => {
-                        self.stack.push(Variable::I32(u-v));
-                    },
-                    (Variable::U64(v), Variable::U64(u)) => {
-                        self.stack.push(Variable::U64(u-v));
-                    },
-                    (Variable::I64(v), Variable::I64(u)) => {
-                        self.stack.push(Variable::I64(u-v));
-                    },
-                    (Variable::F32(v), Variable::F32(u)) => {
-                        self.stack.push(Variable::F32(u-v));
-                    },
-                    (Variable::F64(v), Variable::F64(u)) => {
-                        self.stack.push(Variable::F64(u-v));
-                    },
-                    _ => {return false;}
+                if let Ok(r) = v1 - v2 {
+                    self.stack.push(r);
+                    true
+                } else {
+                    false
                 }
-                true
             },
             Instruction::MUL(reg1, reg2) => {
                 let v1 = self.reg[reg1];
@@ -571,6 +508,164 @@ impl VirtualMachine {
                 self.stack.push(Variable::U16(self.ip as u16 + 1));
                 self.execute(Instruction::JMP(reg))
             },
+            Instruction::OR(reg1, reg2) => {
+                let v1 = self.reg[reg1];
+                let v2 = self.reg[reg2];
+                match (v1, v2){
+                    (Variable::U8(v), Variable::U8(u)) => {
+                        self.stack.push(Variable::U8(u|v));
+                    },
+                    (Variable::I8(v), Variable::I8(u)) => {
+                        self.stack.push(Variable::I8(u|v));
+                    },
+                    (Variable::U16(v), Variable::U16(u)) => {
+                        self.stack.push(Variable::U16(u|v));
+                    },
+                    (Variable::I16(v), Variable::I16(u)) => {
+                        self.stack.push(Variable::I16(u|v));
+                    },
+                    (Variable::U32(v), Variable::U32(u)) => {
+                        self.stack.push(Variable::U32(u|v));
+                    },
+                    (Variable::I32(v), Variable::I32(u)) => {
+                        self.stack.push(Variable::I32(u|v));
+                    },
+                    (Variable::U64(v), Variable::U64(u)) => {
+                        self.stack.push(Variable::U64(u|v));
+                    },
+                    (Variable::I64(v), Variable::I64(u)) => {
+                        self.stack.push(Variable::I64(u|v));
+                    },
+                    _ => {return false;}
+                }
+                true
+            },
+            Instruction::XOR(reg1, reg2) => {
+                let v1 = self.reg[reg1];
+                let v2 = self.reg[reg2];
+                match (v1, v2){
+                    (Variable::U8(v), Variable::U8(u)) => {
+                        self.stack.push(Variable::U8(u^v));
+                    },
+                    (Variable::I8(v), Variable::I8(u)) => {
+                        self.stack.push(Variable::I8(u^v));
+                    },
+                    (Variable::U16(v), Variable::U16(u)) => {
+                        self.stack.push(Variable::U16(u^v));
+                    },
+                    (Variable::I16(v), Variable::I16(u)) => {
+                        self.stack.push(Variable::I16(u^v));
+                    },
+                    (Variable::U32(v), Variable::U32(u)) => {
+                        self.stack.push(Variable::U32(u^v));
+                    },
+                    (Variable::I32(v), Variable::I32(u)) => {
+                        self.stack.push(Variable::I32(u^v));
+                    },
+                    (Variable::U64(v), Variable::U64(u)) => {
+                        self.stack.push(Variable::U64(u^v));
+                    },
+                    (Variable::I64(v), Variable::I64(u)) => {
+                        self.stack.push(Variable::I64(u^v));
+                    },
+                    _ => {return false;}
+                }
+                true
+            },
+            Instruction::SHR(reg1, v2) => {
+                let v1 = self.reg[reg1];
+                match (v1, v2){
+                    (Variable::U8(v), Variable::U8(u)) => {
+                        self.stack.push(Variable::U8(u>>v));
+                    },
+                    (Variable::I8(v), Variable::I8(u)) => {
+                        self.stack.push(Variable::I8(u>>v));
+                    },
+                    (Variable::U16(v), Variable::U16(u)) => {
+                        self.stack.push(Variable::U16(u>>v));
+                    },
+                    (Variable::I16(v), Variable::I16(u)) => {
+                        self.stack.push(Variable::I16(u>>v));
+                    },
+                    (Variable::U32(v), Variable::U32(u)) => {
+                        self.stack.push(Variable::U32(u>>v));
+                    },
+                    (Variable::I32(v), Variable::I32(u)) => {
+                        self.stack.push(Variable::I32(u>>v));
+                    },
+                    (Variable::U64(v), Variable::U64(u)) => {
+                        self.stack.push(Variable::U64(u>>v));
+                    },
+                    (Variable::I64(v), Variable::I64(u)) => {
+                        self.stack.push(Variable::I64(u>>v));
+                    },
+                    _ => {return false;}
+                }
+                true
+            },
+            Instruction::SHL(reg1, v2) => {
+                let v1 = self.reg[reg1];
+                match (v1, v2){
+                    (Variable::U8(v), Variable::U8(u)) => {
+                        self.stack.push(Variable::U8(u<<v));
+                    },
+                    (Variable::I8(v), Variable::I8(u)) => {
+                        self.stack.push(Variable::I8(u<<v));
+                    },
+                    (Variable::U16(v), Variable::U16(u)) => {
+                        self.stack.push(Variable::U16(u<<v));
+                    },
+                    (Variable::I16(v), Variable::I16(u)) => {
+                        self.stack.push(Variable::I16(u<<v));
+                    },
+                    (Variable::U32(v), Variable::U32(u)) => {
+                        self.stack.push(Variable::U32(u<<v));
+                    },
+                    (Variable::I32(v), Variable::I32(u)) => {
+                        self.stack.push(Variable::I32(u<<v));
+                    },
+                    (Variable::U64(v), Variable::U64(u)) => {
+                        self.stack.push(Variable::U64(u<<v));
+                    },
+                    (Variable::I64(v), Variable::I64(u)) => {
+                        self.stack.push(Variable::I64(u<<v));
+                    },
+                    _ => {return false;}
+                }
+                true
+            },
+            Instruction::AND(reg1, reg2) => {
+                let v1 = self.reg[reg1];
+                let v2 = self.reg[reg2];
+                match (v1, v2){
+                    (Variable::U8(v), Variable::U8(u)) => {
+                        self.stack.push(Variable::U8(u&v));
+                    },
+                    (Variable::I8(v), Variable::I8(u)) => {
+                        self.stack.push(Variable::I8(u&v));
+                    },
+                    (Variable::U16(v), Variable::U16(u)) => {
+                        self.stack.push(Variable::U16(u&v));
+                    },
+                    (Variable::I16(v), Variable::I16(u)) => {
+                        self.stack.push(Variable::I16(u&v));
+                    },
+                    (Variable::U32(v), Variable::U32(u)) => {
+                        self.stack.push(Variable::U32(u&v));
+                    },
+                    (Variable::I32(v), Variable::I32(u)) => {
+                        self.stack.push(Variable::I32(u&v));
+                    },
+                    (Variable::U64(v), Variable::U64(u)) => {
+                        self.stack.push(Variable::U64(u&v));
+                    },
+                    (Variable::I64(v), Variable::I64(u)) => {
+                        self.stack.push(Variable::I64(u&v));
+                    },
+                    _ => {return false;}
+                }
+                true
+            },
             Instruction::RET() => {
                 match self.stack.pop() {
                     Some(v) => {
@@ -593,7 +688,6 @@ impl VirtualMachine {
                 self.is_executing = false;
                 true
             },
-            _ => true
         }
     }
 
@@ -612,7 +706,6 @@ impl VirtualMachine {
             
             //execute instruction
             let result = self.execute(instr);
-
             //check if instruction execution finished successfully
             if !result {
                 panic!("Failed to execute instruction at ip:{:?}", self.ip)
@@ -623,8 +716,19 @@ impl VirtualMachine {
         }
     }
 }
-
+    //Example Program:
+    // 1 0 0 10     MOV(R0, 10)
+    // 1 1 0 8      MOV(R1, 8)
+    // 1 2 0 22     MOV(R2, ?) Location to jump to if R0 is greater than R1
+    // 1 3 0 25     MOV(R3, ?) Location to jump to otherwise
+    // 6 0 1        CMP(R0, R1)
+    // 23 2         JG(R2) Jump if R0 is greater than R1
+    // 3 3          JMP(R3)
+    // 7 0          PRINTR(R0)
+    // 22           HALT()
+    // 7 1          PRINTR(R1)
+    // 22           HALT()
 fn main() {
-    let mut vm = VirtualMachine::new(vec![1, 0, 8, 0, 0, 0xc0, 0x3f, 1, 2, 8, 0, 0, 0xc0, 0x3f, 11, 0, 2, 19, 0, 7, 0, 22]);
+    let mut vm = VirtualMachine::new(vec![1, 0, 0, 10, 1, 1, 0, 8, 1, 2, 0, 22, 1, 3, 0, 25, 6, 0, 1, 23, 2, 3, 3, 7, 0, 22, 7, 1, 22]);
     vm.cpu();
 }
