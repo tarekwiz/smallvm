@@ -39,14 +39,14 @@ A very minimal virtual machine written in rust.
 -    HALT(),                         //bye bye
 
 #### Example Program:
-`1 0 0 10`     `MOV(R0, 10)`  
-`1 1 0 8`      `MOV(R1, 8)`  
-`1 2 0 22`     `MOV(R2, 23) Location to jump to if R0 is greater than R1`  
-`1 3 0 25`     `MOV(R3, 25) Location to jump to otherwise`  
-`6 0 1`        `CMP(R0, R1)`  
-`23 2`         `JG(R2) Jump if R0 is greater than R1`  
-`3 3`          `JMP(R3)`  
-`7 0`          `PRINTR(R0)`  
-`22`           `HALT()`  
-`7 1`          `PRINTR(R1)`  
-`22`           `HALT()`  
+- 1 0 0 10      MOV(R0, 10)  
+- 1 1 0 8       MOV(R1, 8)  
+- 1 2 0 22      MOV(R2, 23) Location to jump to if R0 is greater than R1  
+- 1 3 0 25      MOV(R3, 25) Location to jump to otherwise  
+- 6 0 1         CMP(R0, R1)  
+- 23 2          JG(R2) Jump if R0 is greater than R1  
+- 3 3           JMP(R3)  
+- 7 0           PRINTR(R0)  
+- 22            HALT()  
+- 7 1           PRINTR(R1)  
+- 22            HALT()  
