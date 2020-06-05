@@ -3,7 +3,7 @@ use std::convert::TryInto;
 use derive_more::*;
 
 #[derive(Debug, Copy, Clone, PartialOrd, PartialEq, Add, Sub)]
-enum Variable {
+enum Immediate {
     None(),
     U8(u8),
     I8(i8),
@@ -23,7 +23,7 @@ type Address = usize;
 #[derive(Debug, Copy, Clone)]
 enum Instruction {
     NOP(),                          //do nothing
-    MOV(Register, Variable),        //mov variable to reg
+    MOV(Register, Immediate),       //mov immediate to reg
     MOVR(Register, Register),       //mov reg contents to another reg
     JMP(Register),                  //jump to location
     JE(Register),                   //Jump if equal to location
@@ -32,11 +32,11 @@ enum Instruction {
     JL(Register),                   //Jump if less than
     CMP(Register, Register),        //Compares two registers
     PRINTR(Register),               //print contents of register
-    PRINTV(Address),                //print contents of variable at address
-    VSTORE(Address, Variable),      //store variable into VMHeap at specific address from stack
-    VLOAD(Address),                 //load variable from VMHeap and pushes value to stack
-    VSTORER(Address, Register),     //store variable into VMHeap from register contents
-    VLOADR(Register, Address),      //loads a variable from VMHeap to register
+    PRINTV(Address),                //print contents of immediate at address
+    VSTORE(Address, Immediate),     //store immediate into VMHeap at specific address from stack
+    VLOAD(Address),                 //load immediate from VMHeap and pushes value to stack
+    VSTORER(Address, Register),     //store immediate into VMHeap from register contents
+    VLOADR(Register, Address),      //loads a immediate from VMHeap to register
     ADD(Register, Register),        //Add 2 registers and pushes result on stack
     SUB(Register, Register),        //Subtract 2 registers and pushes result on stack
     MUL(Register, Register),        //Multiple 2 registers and pushes result on stack
@@ -44,11 +44,11 @@ enum Instruction {
     AND(Register, Register),        //Bitwise AND on 2 registers. pushes result on stack
     OR(Register, Register),         //Bitwise OR on 2 registers. pushes result on stack
     XOR(Register, Register),        //Bitwise XOR on 2 registers. pushes result on stack
-    SHR(Register, Variable),        //Shifts register to the right by (Variable)
-    SHL(Register, Variable),        //Shifts register to the left by (Variable)
-    VPUSH(Variable),                //Push variable on to the stack
+    SHR(Register, Immediate),       //Shifts register to the right by (immediate)
+    SHL(Register, Immediate),       //Shifts register to the left by (immediate)
+    VPUSH(Immediate),               //Push immediate on to the stack
     VPUSHR(Register),               //Push register contents on the stack
-    VPOP(Register),                 //pops variable from stack to register
+    VPOP(Register),                 //pops immediate from stack to register
     CALL(Register),                 //call functon at address in register
     RET(),                          //return from routine
     HALT(),                         //bye bye
@@ -58,85 +58,85 @@ struct VirtualMachine {
     ip : Address,
     flag_eq : bool,
     flag_gt: bool,
-    reg : [Variable; 8],
+    reg : [Immediate; 8],
     code : Vec<u8>,
-    stack : Vec<Variable>,
-    data : Vec<Variable>,
+    stack : Vec<Immediate>,
+    data : Vec<Immediate>,
     is_executing : bool,
 }
 
 impl VirtualMachine {
-    fn new(c : Vec<u8>) -> Self {
-        VirtualMachine { ip: 0, flag_eq: false, flag_gt: false, reg: [Variable::U8(0); 8], code: c, stack: Vec::new(), data: Vec::new(), is_executing: false } 
+    fn new(c : Vec<u8>, heap_capacity: usize) -> Self {
+        VirtualMachine { ip: 0, flag_eq: false, flag_gt: false, reg: [Immediate::U8(0); 8], code: c, stack: Vec::new(), data: vec![Immediate::U8(0); heap_capacity], is_executing: false } 
     }
-    fn decode_variable(&mut self) -> Variable {
+    fn decode_immediate(&mut self) -> Immediate {
         self.ip += 1;
         match self.code[self.ip] {
             0 => {
                 self.ip += 1;
-                Variable::U8(self.code[self.ip] as u8)
+                Immediate::U8(self.code[self.ip] as u8)
             },
             1 => {
                 self.ip += 1;
-                Variable::I8(self.code[self.ip] as i8)
+                Immediate::I8(self.code[self.ip] as i8)
             },
             2 => {
                 self.ip += 1;
                 let size = mem::size_of::<u16>();
                 let value = u16::from_le_bytes(self.code[self.ip..][..size].try_into().unwrap());
                 self.ip += size - 1;
-                Variable::U16(value)
+                Immediate::U16(value)
             },
             3 => {
                 self.ip += 1;
                 let size = mem::size_of::<i16>();
                 let value = i16::from_le_bytes(self.code[self.ip..][..size].try_into().unwrap());
                 self.ip += size - 1;
-                Variable::I16(value)
+                Immediate::I16(value)
             },
             4 => {
                 self.ip += 1;
                 let size = mem::size_of::<u32>();
                 let value = u32::from_le_bytes(self.code[self.ip..][..size].try_into().unwrap());
                 self.ip += size - 1;
-                Variable::U32(value)
+                Immediate::U32(value)
             },
             5 => {
                 self.ip += 1;
                 let size = mem::size_of::<i32>();
                 let value = i32::from_le_bytes(self.code[self.ip..][..size].try_into().unwrap());
                 self.ip += size - 1;
-                Variable::I32(value)
+                Immediate::I32(value)
             },
             6 => {
                 self.ip += 1;
                 let size = mem::size_of::<u64>();
                 let value = u64::from_le_bytes(self.code[self.ip..][..size].try_into().unwrap());
                 self.ip += size - 1;
-                Variable::U64(value)
+                Immediate::U64(value)
             },
             7 => {
                 self.ip += 1;
                 let size = mem::size_of::<i64>();
                 let value = i64::from_le_bytes(self.code[self.ip..][..size].try_into().unwrap());
                 self.ip += size - 1;
-                Variable::I64(value)
+                Immediate::I64(value)
             },
             8 => {
                 self.ip += 1;
                 let size = mem::size_of::<f32>();
                 let value = f32::from_le_bytes(self.code[self.ip..][..size].try_into().unwrap());
                 self.ip += size - 1;
-                Variable::F32(value)
+                Immediate::F32(value)
             },
             9 => {
                 self.ip += 1;
                 let size = mem::size_of::<f64>();
                 let value = f64::from_le_bytes(self.code[self.ip..][..size].try_into().unwrap());
                 self.ip += size - 1;
-                Variable::F64(value)
+                Immediate::F64(value)
             },
-            _ => Variable::None()
+            _ => Immediate::None()
         }
     }
 
@@ -146,7 +146,7 @@ impl VirtualMachine {
             1 => {
                 self.ip += 1;
                 let register = self.code[self.ip] as Register;
-                let var = self.decode_variable();
+                let var = self.decode_immediate();
                 Instruction::MOV(register, var)
             },
             2 => {
@@ -191,7 +191,7 @@ impl VirtualMachine {
             9 => {
                 self.ip += 1;
                 let addr = self.code[self.ip] as Address;
-                let var = self.decode_variable();
+                let var = self.decode_immediate();
                 Instruction::VSTORE(addr, var)
             },
             10 => {
@@ -242,7 +242,7 @@ impl VirtualMachine {
                 Instruction::VLOADR(reg, addr)
             },
             17 => {
-                let var = self.decode_variable();
+                let var = self.decode_immediate();
                 Instruction::VPUSH(var)
             },
             18 => {
@@ -296,13 +296,13 @@ impl VirtualMachine {
             28 => {
                 self.ip += 1;
                 let reg = self.code[self.ip] as Register;
-                let var = self.decode_variable();
+                let var = self.decode_immediate();
                 Instruction::SHR(reg, var)
             },
             29 => {
                 self.ip += 1;
                 let reg = self.code[self.ip] as Register;
-                let var = self.decode_variable();
+                let var = self.decode_immediate();
                 Instruction::SHL(reg, var)
             },
             _ => Instruction::NOP(),
@@ -323,11 +323,11 @@ impl VirtualMachine {
             },
             Instruction::JMP(reg) => {
                 match self.reg[reg] {
-                    Variable::U8(v) => {
+                    Immediate::U8(v) => {
                         self.ip = v as Address;
                     true
                     }
-                    Variable::U16(v) => {
+                    Immediate::U16(v) => {
                         self.ip = v as Address;
                         true
                     }
@@ -415,35 +415,35 @@ impl VirtualMachine {
                 let v1 = self.reg[reg1];
                 let v2 = self.reg[reg2];
                 match (v1, v2){
-                    (Variable::U8(v), Variable::U8(u)) => {
-                        self.stack.push(Variable::U8(u*v));
+                    (Immediate::U8(v), Immediate::U8(u)) => {
+                        self.stack.push(Immediate::U8(u*v));
                     },
-                    (Variable::I8(v), Variable::I8(u)) => {
-                        self.stack.push(Variable::I8(u*v));
+                    (Immediate::I8(v), Immediate::I8(u)) => {
+                        self.stack.push(Immediate::I8(u*v));
                     },
-                    (Variable::U16(v), Variable::U16(u)) => {
-                        self.stack.push(Variable::U16(u*v));
+                    (Immediate::U16(v), Immediate::U16(u)) => {
+                        self.stack.push(Immediate::U16(u*v));
                     },
-                    (Variable::I16(v), Variable::I16(u)) => {
-                        self.stack.push(Variable::I16(u*v));
+                    (Immediate::I16(v), Immediate::I16(u)) => {
+                        self.stack.push(Immediate::I16(u*v));
                     },
-                    (Variable::U32(v), Variable::U32(u)) => {
-                        self.stack.push(Variable::U32(u*v));
+                    (Immediate::U32(v), Immediate::U32(u)) => {
+                        self.stack.push(Immediate::U32(u*v));
                     },
-                    (Variable::I32(v), Variable::I32(u)) => {
-                        self.stack.push(Variable::I32(u*v));
+                    (Immediate::I32(v), Immediate::I32(u)) => {
+                        self.stack.push(Immediate::I32(u*v));
                     },
-                    (Variable::U64(v), Variable::U64(u)) => {
-                        self.stack.push(Variable::U64(u*v));
+                    (Immediate::U64(v), Immediate::U64(u)) => {
+                        self.stack.push(Immediate::U64(u*v));
                     },
-                    (Variable::I64(v), Variable::I64(u)) => {
-                        self.stack.push(Variable::I64(u*v));
+                    (Immediate::I64(v), Immediate::I64(u)) => {
+                        self.stack.push(Immediate::I64(u*v));
                     },
-                    (Variable::F32(v), Variable::F32(u)) => {
-                        self.stack.push(Variable::F32(u*v));
+                    (Immediate::F32(v), Immediate::F32(u)) => {
+                        self.stack.push(Immediate::F32(u*v));
                     },
-                    (Variable::F64(v), Variable::F64(u)) => {
-                        self.stack.push(Variable::F64(u*v));
+                    (Immediate::F64(v), Immediate::F64(u)) => {
+                        self.stack.push(Immediate::F64(u*v));
                     },
                     _ => {return false;}
                 }
@@ -453,35 +453,35 @@ impl VirtualMachine {
                 let v1 = self.reg[reg1];
                 let v2 = self.reg[reg2];
                 match (v1, v2){
-                    (Variable::U8(v), Variable::U8(u)) => {
-                        self.stack.push(Variable::U8(u/v));
+                    (Immediate::U8(v), Immediate::U8(u)) => {
+                        self.stack.push(Immediate::U8(u/v));
                     },
-                    (Variable::I8(v), Variable::I8(u)) => {
-                        self.stack.push(Variable::I8(u/v));
+                    (Immediate::I8(v), Immediate::I8(u)) => {
+                        self.stack.push(Immediate::I8(u/v));
                     },
-                    (Variable::U16(v), Variable::U16(u)) => {
-                        self.stack.push(Variable::U16(u/v));
+                    (Immediate::U16(v), Immediate::U16(u)) => {
+                        self.stack.push(Immediate::U16(u/v));
                     },
-                    (Variable::I16(v), Variable::I16(u)) => {
-                        self.stack.push(Variable::I16(u/v));
+                    (Immediate::I16(v), Immediate::I16(u)) => {
+                        self.stack.push(Immediate::I16(u/v));
                     },
-                    (Variable::U32(v), Variable::U32(u)) => {
-                        self.stack.push(Variable::U32(u/v));
+                    (Immediate::U32(v), Immediate::U32(u)) => {
+                        self.stack.push(Immediate::U32(u/v));
                     },
-                    (Variable::I32(v), Variable::I32(u)) => {
-                        self.stack.push(Variable::I32(u/v));
+                    (Immediate::I32(v), Immediate::I32(u)) => {
+                        self.stack.push(Immediate::I32(u/v));
                     },
-                    (Variable::U64(v), Variable::U64(u)) => {
-                        self.stack.push(Variable::U64(u/v));
+                    (Immediate::U64(v), Immediate::U64(u)) => {
+                        self.stack.push(Immediate::U64(u/v));
                     },
-                    (Variable::I64(v), Variable::I64(u)) => {
-                        self.stack.push(Variable::I64(u/v));
+                    (Immediate::I64(v), Immediate::I64(u)) => {
+                        self.stack.push(Immediate::I64(u/v));
                     },
-                    (Variable::F32(v), Variable::F32(u)) => {
-                        self.stack.push(Variable::F32(u/v));
+                    (Immediate::F32(v), Immediate::F32(u)) => {
+                        self.stack.push(Immediate::F32(u/v));
                     },
-                    (Variable::F64(v), Variable::F64(u)) => {
-                        self.stack.push(Variable::F64(u/v));
+                    (Immediate::F64(v), Immediate::F64(u)) => {
+                        self.stack.push(Immediate::F64(u/v));
                     },
                     _ => {return false;}
                 }
@@ -505,36 +505,36 @@ impl VirtualMachine {
                 }
             },
             Instruction::CALL(reg) => {
-                self.stack.push(Variable::U16(self.ip as u16 + 1));
+                self.stack.push(Immediate::U16(self.ip as u16 + 1));
                 self.execute(Instruction::JMP(reg))
             },
             Instruction::OR(reg1, reg2) => {
                 let v1 = self.reg[reg1];
                 let v2 = self.reg[reg2];
                 match (v1, v2){
-                    (Variable::U8(v), Variable::U8(u)) => {
-                        self.stack.push(Variable::U8(u|v));
+                    (Immediate::U8(v), Immediate::U8(u)) => {
+                        self.stack.push(Immediate::U8(u|v));
                     },
-                    (Variable::I8(v), Variable::I8(u)) => {
-                        self.stack.push(Variable::I8(u|v));
+                    (Immediate::I8(v), Immediate::I8(u)) => {
+                        self.stack.push(Immediate::I8(u|v));
                     },
-                    (Variable::U16(v), Variable::U16(u)) => {
-                        self.stack.push(Variable::U16(u|v));
+                    (Immediate::U16(v), Immediate::U16(u)) => {
+                        self.stack.push(Immediate::U16(u|v));
                     },
-                    (Variable::I16(v), Variable::I16(u)) => {
-                        self.stack.push(Variable::I16(u|v));
+                    (Immediate::I16(v), Immediate::I16(u)) => {
+                        self.stack.push(Immediate::I16(u|v));
                     },
-                    (Variable::U32(v), Variable::U32(u)) => {
-                        self.stack.push(Variable::U32(u|v));
+                    (Immediate::U32(v), Immediate::U32(u)) => {
+                        self.stack.push(Immediate::U32(u|v));
                     },
-                    (Variable::I32(v), Variable::I32(u)) => {
-                        self.stack.push(Variable::I32(u|v));
+                    (Immediate::I32(v), Immediate::I32(u)) => {
+                        self.stack.push(Immediate::I32(u|v));
                     },
-                    (Variable::U64(v), Variable::U64(u)) => {
-                        self.stack.push(Variable::U64(u|v));
+                    (Immediate::U64(v), Immediate::U64(u)) => {
+                        self.stack.push(Immediate::U64(u|v));
                     },
-                    (Variable::I64(v), Variable::I64(u)) => {
-                        self.stack.push(Variable::I64(u|v));
+                    (Immediate::I64(v), Immediate::I64(u)) => {
+                        self.stack.push(Immediate::I64(u|v));
                     },
                     _ => {return false;}
                 }
@@ -544,29 +544,29 @@ impl VirtualMachine {
                 let v1 = self.reg[reg1];
                 let v2 = self.reg[reg2];
                 match (v1, v2){
-                    (Variable::U8(v), Variable::U8(u)) => {
-                        self.stack.push(Variable::U8(u^v));
+                    (Immediate::U8(v), Immediate::U8(u)) => {
+                        self.stack.push(Immediate::U8(u^v));
                     },
-                    (Variable::I8(v), Variable::I8(u)) => {
-                        self.stack.push(Variable::I8(u^v));
+                    (Immediate::I8(v), Immediate::I8(u)) => {
+                        self.stack.push(Immediate::I8(u^v));
                     },
-                    (Variable::U16(v), Variable::U16(u)) => {
-                        self.stack.push(Variable::U16(u^v));
+                    (Immediate::U16(v), Immediate::U16(u)) => {
+                        self.stack.push(Immediate::U16(u^v));
                     },
-                    (Variable::I16(v), Variable::I16(u)) => {
-                        self.stack.push(Variable::I16(u^v));
+                    (Immediate::I16(v), Immediate::I16(u)) => {
+                        self.stack.push(Immediate::I16(u^v));
                     },
-                    (Variable::U32(v), Variable::U32(u)) => {
-                        self.stack.push(Variable::U32(u^v));
+                    (Immediate::U32(v), Immediate::U32(u)) => {
+                        self.stack.push(Immediate::U32(u^v));
                     },
-                    (Variable::I32(v), Variable::I32(u)) => {
-                        self.stack.push(Variable::I32(u^v));
+                    (Immediate::I32(v), Immediate::I32(u)) => {
+                        self.stack.push(Immediate::I32(u^v));
                     },
-                    (Variable::U64(v), Variable::U64(u)) => {
-                        self.stack.push(Variable::U64(u^v));
+                    (Immediate::U64(v), Immediate::U64(u)) => {
+                        self.stack.push(Immediate::U64(u^v));
                     },
-                    (Variable::I64(v), Variable::I64(u)) => {
-                        self.stack.push(Variable::I64(u^v));
+                    (Immediate::I64(v), Immediate::I64(u)) => {
+                        self.stack.push(Immediate::I64(u^v));
                     },
                     _ => {return false;}
                 }
@@ -575,29 +575,29 @@ impl VirtualMachine {
             Instruction::SHR(reg1, v2) => {
                 let v1 = self.reg[reg1];
                 match (v1, v2){
-                    (Variable::U8(v), Variable::U8(u)) => {
-                        self.stack.push(Variable::U8(u>>v));
+                    (Immediate::U8(v), Immediate::U8(u)) => {
+                        self.stack.push(Immediate::U8(u>>v));
                     },
-                    (Variable::I8(v), Variable::I8(u)) => {
-                        self.stack.push(Variable::I8(u>>v));
+                    (Immediate::I8(v), Immediate::I8(u)) => {
+                        self.stack.push(Immediate::I8(u>>v));
                     },
-                    (Variable::U16(v), Variable::U16(u)) => {
-                        self.stack.push(Variable::U16(u>>v));
+                    (Immediate::U16(v), Immediate::U16(u)) => {
+                        self.stack.push(Immediate::U16(u>>v));
                     },
-                    (Variable::I16(v), Variable::I16(u)) => {
-                        self.stack.push(Variable::I16(u>>v));
+                    (Immediate::I16(v), Immediate::I16(u)) => {
+                        self.stack.push(Immediate::I16(u>>v));
                     },
-                    (Variable::U32(v), Variable::U32(u)) => {
-                        self.stack.push(Variable::U32(u>>v));
+                    (Immediate::U32(v), Immediate::U32(u)) => {
+                        self.stack.push(Immediate::U32(u>>v));
                     },
-                    (Variable::I32(v), Variable::I32(u)) => {
-                        self.stack.push(Variable::I32(u>>v));
+                    (Immediate::I32(v), Immediate::I32(u)) => {
+                        self.stack.push(Immediate::I32(u>>v));
                     },
-                    (Variable::U64(v), Variable::U64(u)) => {
-                        self.stack.push(Variable::U64(u>>v));
+                    (Immediate::U64(v), Immediate::U64(u)) => {
+                        self.stack.push(Immediate::U64(u>>v));
                     },
-                    (Variable::I64(v), Variable::I64(u)) => {
-                        self.stack.push(Variable::I64(u>>v));
+                    (Immediate::I64(v), Immediate::I64(u)) => {
+                        self.stack.push(Immediate::I64(u>>v));
                     },
                     _ => {return false;}
                 }
@@ -606,29 +606,29 @@ impl VirtualMachine {
             Instruction::SHL(reg1, v2) => {
                 let v1 = self.reg[reg1];
                 match (v1, v2){
-                    (Variable::U8(v), Variable::U8(u)) => {
-                        self.stack.push(Variable::U8(u<<v));
+                    (Immediate::U8(v), Immediate::U8(u)) => {
+                        self.stack.push(Immediate::U8(u<<v));
                     },
-                    (Variable::I8(v), Variable::I8(u)) => {
-                        self.stack.push(Variable::I8(u<<v));
+                    (Immediate::I8(v), Immediate::I8(u)) => {
+                        self.stack.push(Immediate::I8(u<<v));
                     },
-                    (Variable::U16(v), Variable::U16(u)) => {
-                        self.stack.push(Variable::U16(u<<v));
+                    (Immediate::U16(v), Immediate::U16(u)) => {
+                        self.stack.push(Immediate::U16(u<<v));
                     },
-                    (Variable::I16(v), Variable::I16(u)) => {
-                        self.stack.push(Variable::I16(u<<v));
+                    (Immediate::I16(v), Immediate::I16(u)) => {
+                        self.stack.push(Immediate::I16(u<<v));
                     },
-                    (Variable::U32(v), Variable::U32(u)) => {
-                        self.stack.push(Variable::U32(u<<v));
+                    (Immediate::U32(v), Immediate::U32(u)) => {
+                        self.stack.push(Immediate::U32(u<<v));
                     },
-                    (Variable::I32(v), Variable::I32(u)) => {
-                        self.stack.push(Variable::I32(u<<v));
+                    (Immediate::I32(v), Immediate::I32(u)) => {
+                        self.stack.push(Immediate::I32(u<<v));
                     },
-                    (Variable::U64(v), Variable::U64(u)) => {
-                        self.stack.push(Variable::U64(u<<v));
+                    (Immediate::U64(v), Immediate::U64(u)) => {
+                        self.stack.push(Immediate::U64(u<<v));
                     },
-                    (Variable::I64(v), Variable::I64(u)) => {
-                        self.stack.push(Variable::I64(u<<v));
+                    (Immediate::I64(v), Immediate::I64(u)) => {
+                        self.stack.push(Immediate::I64(u<<v));
                     },
                     _ => {return false;}
                 }
@@ -638,29 +638,29 @@ impl VirtualMachine {
                 let v1 = self.reg[reg1];
                 let v2 = self.reg[reg2];
                 match (v1, v2){
-                    (Variable::U8(v), Variable::U8(u)) => {
-                        self.stack.push(Variable::U8(u&v));
+                    (Immediate::U8(v), Immediate::U8(u)) => {
+                        self.stack.push(Immediate::U8(u&v));
                     },
-                    (Variable::I8(v), Variable::I8(u)) => {
-                        self.stack.push(Variable::I8(u&v));
+                    (Immediate::I8(v), Immediate::I8(u)) => {
+                        self.stack.push(Immediate::I8(u&v));
                     },
-                    (Variable::U16(v), Variable::U16(u)) => {
-                        self.stack.push(Variable::U16(u&v));
+                    (Immediate::U16(v), Immediate::U16(u)) => {
+                        self.stack.push(Immediate::U16(u&v));
                     },
-                    (Variable::I16(v), Variable::I16(u)) => {
-                        self.stack.push(Variable::I16(u&v));
+                    (Immediate::I16(v), Immediate::I16(u)) => {
+                        self.stack.push(Immediate::I16(u&v));
                     },
-                    (Variable::U32(v), Variable::U32(u)) => {
-                        self.stack.push(Variable::U32(u&v));
+                    (Immediate::U32(v), Immediate::U32(u)) => {
+                        self.stack.push(Immediate::U32(u&v));
                     },
-                    (Variable::I32(v), Variable::I32(u)) => {
-                        self.stack.push(Variable::I32(u&v));
+                    (Immediate::I32(v), Immediate::I32(u)) => {
+                        self.stack.push(Immediate::I32(u&v));
                     },
-                    (Variable::U64(v), Variable::U64(u)) => {
-                        self.stack.push(Variable::U64(u&v));
+                    (Immediate::U64(v), Immediate::U64(u)) => {
+                        self.stack.push(Immediate::U64(u&v));
                     },
-                    (Variable::I64(v), Variable::I64(u)) => {
-                        self.stack.push(Variable::I64(u&v));
+                    (Immediate::I64(v), Immediate::I64(u)) => {
+                        self.stack.push(Immediate::I64(u&v));
                     },
                     _ => {return false;}
                 }
@@ -670,11 +670,11 @@ impl VirtualMachine {
                 match self.stack.pop() {
                     Some(v) => {
                         match v {
-                            Variable::U8(u) => {
+                            Immediate::U8(u) => {
                                 self.ip = u as usize;
                                 true
                             }
-                            Variable::U16(u) => {
+                            Immediate::U16(u) => {
                                 self.ip = u as usize;
                                 true
                             }
@@ -729,6 +729,6 @@ impl VirtualMachine {
     // 7 1          PRINTR(R1)
     // 22           HALT()
 fn main() {
-    let mut vm = VirtualMachine::new(vec![1, 0, 0, 10, 1, 1, 0, 8, 1, 2, 0, 22, 1, 3, 0, 25, 6, 0, 1, 23, 2, 3, 3, 7, 0, 22, 7, 1, 22]);
+    let mut vm = VirtualMachine::new(vec![1, 0, 0, 10, 1, 1, 0, 8, 1, 2, 0, 22, 1, 3, 0, 25, 6, 0, 1, 23, 2, 3, 3, 7, 0, 22, 7, 1, 22], 1024);
     vm.cpu();
 }
